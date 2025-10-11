@@ -10,6 +10,7 @@ library(VIM)
 library(mlr)
 library(lubridate)
 library(stringr)
+library(readxl)
 
 # LECTURA DE DATOS
 
@@ -141,5 +142,81 @@ ggplot(top_productos_cant, aes(x = reorder(descripcion, cantidad_total), y = can
        y = "Cantidad total vendida (unidades)") +
   theme_minimal() +
   theme(plot.title = element_text(face="bold", hjust=0.5))
+
+#Promedio diario de ventas por mes
+ventas_categoria <- ventas.limpia %>%
+  group_by(categoria) %>%
+  summarise(cantidad_total = sum(as.numeric(cantidad), na.rm = TRUE)) %>%
+  arrange(desc(cantidad_total))
+
+ventas_mensual_promedio <- ventas.limpia %>%mutate(mes = floor_date(fecha, "month")) %>%
+  group_by(mes) %>%summarise(promedio_diario = mean(total_item, na.rm = TRUE))
+
+ggplot(ventas_mensual_promedio, aes(x = mes, y = promedio_diario)) +
+  geom_line(color = "darkblue", linewidth = 1.2) +
+  geom_point(color = "orange", size = 2) +
+  labs(title = "Promedio diario de ventas por mes",
+       x = "Mes", y = "Promedio de ventas (S/)") +
+  theme_minimal()
+
+
+#Evolucion mensual de ventas por articulo (10 mejores)
+top_articulos <- ventas.limpia %>%
+  group_by(descripcion) %>%
+  summarise(total_cantidad = sum(as.numeric(cantidad), na.rm = TRUE)) %>%
+  arrange(desc(total_cantidad)) %>%
+  slice(1:10) %>%
+  pull(descripcion)
+
+ventas_articulo_mes <- ventas.limpia %>%
+  filter(descripcion %in% top_articulos) %>%
+  mutate(mes = floor_date(fecha, "month")) %>%
+  group_by(mes, descripcion) %>%
+  summarise(cantidad_total = sum(as.numeric(cantidad), na.rm = TRUE), .groups = "drop")
+
+ggplot(ventas_articulo_mes, aes(x = mes, y = cantidad_total, color = descripcion, group = descripcion)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(title = "Evolución mensual de ventas por artículo (Top 10)",
+       x = "Mes",
+       y = "Cantidad vendida (unidades)",
+       color = "Producto") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(face = "bold", hjust = 0.5))
+
+#Relacion entre precio y cantidad vendida
+ventas_filtradas <- ventas.limpia %>%
+  filter(precio_unitario <= 50) 
+
+ggplot(ventas_filtradas, aes(x = precio_unitario, y = cantidad)) +
+  geom_point(alpha = 0.4, color = "darkblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Relación entre precio y cantidad vendida (precios ≤ S/ 50)",
+       x = "Precio unitario (S/)",
+       y = "Cantidad vendida (unidades)") +
+  theme_minimal()
+
+#Evolucion de precios de los 3 productos mas vendidos
+productos_seleccionados <- c("GRANEL: Arroz Faraón", "GRANEL: Huevos", "GRANEL: Azucar Rubia")
+
+precio_varios <- ventas.limpia %>%
+  filter(descripcion %in% productos_seleccionados, precio_unitario <= 10) %>%
+  mutate(fecha = as.Date(fecha)) %>%
+  group_by(fecha, descripcion) %>%
+  summarise(precio_promedio = mean(precio_unitario, na.rm = TRUE), .groups = "drop")
+
+ggplot(precio_varios, aes(x = fecha, y = precio_promedio, color = descripcion, group = descripcion)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  labs(title = "Evolución comparativa de precios por producto (≤ S/ 10)",
+       x = "Fecha",
+       y = "Precio promedio (S/)",
+       color = "Producto") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),
+        legend.position = "bottom")
+
+#Guardado del dataset limpio
 
 write_csv(ventas.limpia, "ventas_limpias.csv", na = "")
